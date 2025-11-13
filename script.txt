@@ -1,0 +1,793 @@
+// script.js
+
+document.addEventListener('DOMContentLoaded', () => {
+    // --- MOBILE DETECTION ---
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+        || window.innerWidth <= 768;
+    
+    // --- 1. CUSTOM WEBGL FLUID WATERCOLOR BACKGROUND ---
+    const fluidCanvas = document.getElementById('fluid-canvas');
+    const gl = fluidCanvas.getContext('webgl');
+    
+    if (!gl || isMobile) {
+        console.warn('WebGL not supported or mobile device, falling back to static background');
+        fluidCanvas.style.background = `
+            radial-gradient(circle at 20% 30%, rgba(204, 179, 242, 0.9) 0%, transparent 50%),
+            radial-gradient(circle at 80% 20%, rgba(102, 230, 153, 0.8) 0%, transparent 50%),
+            radial-gradient(circle at 40% 70%, rgba(255, 153, 128, 0.9) 0%, transparent 50%),
+            radial-gradient(circle at 90% 80%, rgba(255, 217, 51, 0.7) 0%, transparent 50%),
+            radial-gradient(circle at 60% 50%, rgba(179, 217, 242, 0.6) 0%, transparent 50%),
+            radial-gradient(circle at 10% 80%, rgba(230, 179, 204, 0.7) 0%, transparent 50%),
+            linear-gradient(135deg, #faf6f2, #e6d9f5, #b3e6cc, #ffcdb2)
+        `;
+        fluidCanvas.style.animation = 'gentleShift 20s ease-in-out infinite';
+        
+        // Add CSS animation for the static background
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes gentleShift {
+                0%, 100% { filter: hue-rotate(0deg) brightness(1); }
+                50% { filter: hue-rotate(20deg) brightness(1.1); }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Skip WebGL initialization
+        initializeGarden();
+        return;
+    }
+
+    // Resize canvas to match display size
+    function resizeCanvas() {
+        const displayWidth = fluidCanvas.clientWidth;
+        const displayHeight = fluidCanvas.clientHeight;
+        
+        if (fluidCanvas.width !== displayWidth || fluidCanvas.height !== displayHeight) {
+            fluidCanvas.width = displayWidth;
+            fluidCanvas.height = displayHeight;
+            gl.viewport(0, 0, displayWidth, displayHeight);
+        }
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    // Vertex shader (positions for the full-screen quad)
+    const vertexShaderSource = `
+        attribute vec2 a_position;
+        varying vec2 v_texCoord;
+        void main() {
+            gl_Position = vec4(a_position, 0.0, 1.0);
+            v_texCoord = a_position * 0.5 + 0.5;
+        }
+    `;
+
+    // Fragment shader with noise-based watercolor effect
+    const fragmentShaderSource = `
+        precision mediump float;
+        varying vec2 v_texCoord;
+        uniform float u_time;
+        uniform vec2 u_resolution;
+        uniform vec2 u_mouse;
+
+        // Noise function (simplified Perlin-like noise)
+        float noise(vec2 p) {
+            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+
+        float smoothNoise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            
+            float a = noise(i);
+            float b = noise(i + vec2(1.0, 0.0));
+            float c = noise(i + vec2(0.0, 1.0));
+            float d = noise(i + vec2(1.0, 1.0));
+            
+            return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+        }
+
+        float fbm(vec2 p) {
+            float value = 0.0;
+            float amplitude = 0.5;
+            float frequency = 1.0;
+            
+            for (int i = 0; i < 4; i++) {
+                value += amplitude * smoothNoise(p * frequency);
+                amplitude *= 0.5;
+                frequency *= 2.0;
+            }
+            return value;
+        }
+
+        void main() {
+            vec2 uv = v_texCoord;
+            vec2 p = uv * 4.0;
+            
+            // Create flowing time-based animation
+            float t = u_time * 0.1;
+            p += vec2(sin(t * 0.7), cos(t * 0.5)) * 0.5;
+            
+            // Mouse interaction - create ripples
+            vec2 mouseUv = u_mouse / u_resolution;
+            float mouseDist = length(uv - mouseUv);
+            float ripple = sin(mouseDist * 20.0 - u_time * 3.0) * exp(-mouseDist * 8.0) * 0.2;
+            p += ripple;
+            
+            // Generate multiple noise layers
+            float n1 = fbm(p + t);
+            float n2 = fbm(p * 0.8 + vec2(t * 0.6, -t * 0.4));
+            float n3 = fbm(p * 1.2 + vec2(-t * 0.3, t * 0.8));
+            
+            // Combine noise layers
+            float combined = (n1 + n2 + n3) / 3.0;
+            
+            // Enhanced watercolor palette with more vibrant colors
+            vec3 deepLavender = vec3(0.8, 0.7, 0.95);     // Richer lavender
+            vec3 emeraldGreen = vec3(0.4, 0.9, 0.6);      // More vibrant green
+            vec3 warmCoral = vec3(1.0, 0.6, 0.5);         // Warmer coral
+            vec3 goldenYellow = vec3(1.0, 0.85, 0.2);     // More golden
+            vec3 softPeach = vec3(0.98, 0.9, 0.82);       // Warmer base
+            vec3 dustyRose = vec3(0.9, 0.7, 0.8);         // Additional color
+            vec3 skyBlue = vec3(0.7, 0.85, 0.95);         // Soft blue accent
+            
+            // Create more complex color mixing with additional variation
+            float colorPhase = sin(combined * 3.14159 * 2.0 + t * 0.5) * 0.5 + 0.5;
+            vec3 color = softPeach;
+            
+            // Layer 1: Base color transitions
+            if (combined < 0.15) {
+                color = mix(softPeach, deepLavender, smoothstep(0.0, 0.15, combined));
+            } else if (combined < 0.3) {
+                color = mix(deepLavender, skyBlue, smoothstep(0.15, 0.3, combined));
+            } else if (combined < 0.45) {
+                color = mix(skyBlue, emeraldGreen, smoothstep(0.3, 0.45, combined));
+            } else if (combined < 0.6) {
+                color = mix(emeraldGreen, warmCoral, smoothstep(0.45, 0.6, combined));
+            } else if (combined < 0.75) {
+                color = mix(warmCoral, goldenYellow, smoothstep(0.6, 0.75, combined));
+            } else if (combined < 0.9) {
+                color = mix(goldenYellow, dustyRose, smoothstep(0.75, 0.9, combined));
+            } else {
+                color = mix(dustyRose, softPeach, smoothstep(0.9, 1.0, combined));
+            }
+            
+            // Layer 2: Add flowing color variations based on time and position
+            vec3 timeColor = mix(deepLavender, warmCoral, sin(uv.x * 2.0 + t) * 0.5 + 0.5);
+            color = mix(color, timeColor, 0.1 * colorPhase);
+            
+            // Layer 3: Add subtle color swirls
+            float swirl = sin(uv.x * 8.0 + cos(uv.y * 6.0) + t * 2.0) * 0.5 + 0.5;
+            vec3 swirlColor = mix(emeraldGreen, goldenYellow, swirl);
+            color = mix(color, swirlColor, 0.05);
+            
+            // Add subtle texture variation
+            float texture = smoothNoise(uv * 200.0) * 0.05;
+            color += texture;
+            
+            gl_FragColor = vec4(color, 1.0);
+        }
+    `;
+
+    // Shader compilation helper
+    function createShader(gl, type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            console.error('Shader compilation error:', gl.getShaderInfoLog(shader));
+            gl.deleteShader(shader);
+            return null;
+        }
+        return shader;
+    }
+
+    // Create and link shader program
+    const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+    const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+    
+    const program = gl.createProgram();
+    gl.attachShader(program, vertexShader);
+    gl.attachShader(program, fragmentShader);
+    gl.linkProgram(program);
+    
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        console.error('Program linking error:', gl.getProgramInfoLog(program));
+        return;
+    }
+
+    // Get attribute and uniform locations
+    const positionAttribute = gl.getAttribLocation(program, 'a_position');
+    const timeUniform = gl.getUniformLocation(program, 'u_time');
+    const resolutionUniform = gl.getUniformLocation(program, 'u_resolution');
+    const mouseUniform = gl.getUniformLocation(program, 'u_mouse');
+
+    // Create full-screen quad
+    const positions = [
+        -1, -1,
+         1, -1,
+        -1,  1,
+         1,  1
+    ];
+    
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+    // Mouse tracking
+    let mouseX = 0, mouseY = 0;
+    fluidCanvas.addEventListener('mousemove', (e) => {
+        const rect = fluidCanvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        mouseY = fluidCanvas.height - (e.clientY - rect.top); // Flip Y coordinate
+    });
+
+    // Animation loop
+    function animate(time) {
+        resizeCanvas();
+        
+        gl.useProgram(program);
+        
+        // Set uniforms
+        gl.uniform1f(timeUniform, time * 0.001);
+        gl.uniform2f(resolutionUniform, fluidCanvas.width, fluidCanvas.height);
+        gl.uniform2f(mouseUniform, mouseX, mouseY);
+        
+        // Set up vertex data
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+        gl.enableVertexAttribArray(positionAttribute);
+        gl.vertexAttribPointer(positionAttribute, 2, gl.FLOAT, false, 0, 0);
+        
+        // Draw
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        
+        requestAnimationFrame(animate);
+    }
+    
+    animate(0);
+    
+    // Initialize garden after WebGL setup
+    initializeGarden();
+    
+    // Function to initialize garden components
+    function initializeGarden() {
+        // --- 2. GARDEN CANVAS SETUP ---
+    const gardenCanvas = document.getElementById('garden-canvas');
+    const ctx = gardenCanvas.getContext('2d');
+    let { width, height } = gardenCanvas.getBoundingClientRect();
+    gardenCanvas.width = width;
+    gardenCanvas.height = height;
+
+    window.addEventListener('resize', () => {
+        let newSize = gardenCanvas.getBoundingClientRect();
+        width = newSize.width;
+        height = newSize.height;
+        gardenCanvas.width = width;
+        gardenCanvas.height = height;
+    });
+
+    // --- 3. L-SYSTEM FOR PROCEDURAL PLANT GENERATION ---
+    
+    // L-System rule sets for different plant types - optimized for better branching
+    const plantTypes = {
+        flower: {
+            axiom: 'F',
+            rules: { 'F': 'FF[+F][-F]' },
+            angle: 35,
+            iterations: 3,
+            colors: [
+                { r: 216, g: 112, b: 147 }, // Pale Violet Red
+                { r: 255, g: 105, b: 180 }, // Hot Pink
+                { r: 218, g: 112, b: 214 }  // Orchid
+            ]
+        },
+        fern: {
+            axiom: 'F',
+            rules: { 'F': 'F[+F]F[-F]' },
+            angle: 28,
+            iterations: 3,
+            colors: [
+                { r: 46, g: 139, b: 87 },   // Sea Green
+                { r: 34, g: 139, b: 34 },   // Forest Green
+                { r: 107, g: 142, b: 35 }   // Olive Drab
+            ]
+        },
+        vine: {
+            axiom: 'F',
+            rules: { 'F': 'F[+F][-F]F' },
+            angle: 32,
+            iterations: 3,
+            colors: [
+                { r: 70, g: 130, b: 180 },  // Steel Blue
+                { r: 100, g: 149, b: 237 }, // Cornflower Blue
+                { r: 135, g: 206, b: 235 }  // Sky Blue
+            ]
+        },
+        tree: {
+            axiom: 'F',
+            rules: { 'F': 'FF[++F][--F]' },
+            angle: 30,
+            iterations: 3,
+            colors: [
+                { r: 160, g: 82, b: 45 },   // Saddle Brown
+                { r: 139, g: 69, b: 19 },   // Saddle Brown
+                { r: 210, g: 180, b: 140 }  // Tan
+            ]
+        }
+    };
+
+    // Generate L-System string
+    function generateLSystem(axiom, rules, iterations) {
+        let result = axiom;
+        for (let i = 0; i < iterations; i++) {
+            let newResult = '';
+            for (let char of result) {
+                newResult += rules[char] || char;
+            }
+            result = newResult;
+        }
+        return result;
+    }
+
+    // Turtle graphics state
+    class TurtleState {
+        constructor(x, y, angle, length) {
+            this.x = x;
+            this.y = y;
+            this.angle = angle;
+            this.length = length;
+        }
+
+        copy() {
+            return new TurtleState(this.x, this.y, this.angle, this.length);
+        }
+    }
+
+    // Draw L-System with watercolor effects
+    function drawLSystem(lSystemString, startX, startY, plantType, animate = false) {
+        const state = new TurtleState(startX, startY, -Math.PI / 2, 10);
+        const stateStack = [];
+        const angleRad = (plantType.angle * Math.PI) / 180;
+        const segments = [];
+        
+        // Simple approach: track the final position after each complete branch
+        const finalPositions = [];
+        let currentBranch = { positions: [] };
+        
+        // Parse L-System string and execute turtle graphics
+        for (let char of lSystemString) {
+            switch (char) {
+                case 'F':
+                    const newX = state.x + Math.cos(state.angle) * state.length;
+                    const newY = state.y + Math.sin(state.angle) * state.length;
+                    segments.push({
+                        type: 'line',
+                        startX: state.x,
+                        startY: state.y,
+                        endX: newX,
+                        endY: newY,
+                        length: state.length,
+                        depth: stateStack.length
+                    });
+                    
+                    state.x = newX;
+                    state.y = newY;
+                    state.length *= 0.88;
+                    
+                    // Record this position for potential flower placement
+                    currentBranch.positions.push({
+                        x: newX,
+                        y: newY,
+                        depth: stateStack.length
+                    });
+                    break;
+                case '+':
+                    state.angle += angleRad + (Math.random() - 0.5) * 0.3;
+                    break;
+                case '-':
+                    state.angle -= angleRad + (Math.random() - 0.5) * 0.3;
+                    break;
+                case '[':
+                    stateStack.push(state.copy());
+                    // Start tracking new branch
+                    currentBranch = { positions: [] };
+                    break;
+                case ']':
+                    // End of branch - save the final position of this branch
+                    if (currentBranch.positions.length > 0) {
+                        const finalPos = currentBranch.positions[currentBranch.positions.length - 1];
+                        finalPositions.push({
+                            x: finalPos.x,
+                            y: finalPos.y,
+                            depth: finalPos.depth,
+                            size: finalPos.depth === 0 ? 'large' : finalPos.depth === 1 ? 'medium' : 'small'
+                        });
+                    }
+                    
+                    // Restore turtle state
+                    if (stateStack.length > 0) {
+                        const savedState = stateStack.pop();
+                        state.x = savedState.x;
+                        state.y = savedState.y;
+                        state.angle = savedState.angle;
+                        state.length = savedState.length;
+                    }
+                    
+                    // Reset branch tracking
+                    currentBranch = { positions: [] };
+                    break;
+            }
+        }
+        
+        // Add the main stem tip (final position after all parsing) - this should be the topmost point
+        finalPositions.push({
+            x: state.x,
+            y: state.y,
+            depth: 0,
+            size: 'large'
+        });
+        
+        console.log('Plant base at:', startX, startY);
+        console.log('Main stem tip at:', Math.round(state.x), Math.round(state.y));
+        
+        // Select 1-3 flowers, prioritizing the TOP positions (LOWEST Y values since plants grow upward)
+        const uniquePositions = finalPositions.filter((pos, index, arr) => {
+            // Remove duplicates that are too close
+            return !arr.slice(0, index).some(prev => 
+                Math.abs(prev.x - pos.x) < 15 && Math.abs(prev.y - pos.y) < 15
+            );
+        });
+        
+        // Find the minimum Y (topmost positions) and only consider positions within a small range of it
+        const minY = Math.min(...uniquePositions.map(p => p.y));
+        const topPositions = uniquePositions.filter(pos => pos.y <= minY + 10); // Within 10 pixels of the top
+        
+        // Select 1-3 flowers from only the topmost positions
+        const flowerPositions = topPositions
+            .sort((a, b) => a.y - b.y) // Sort by Y position - LOWER Y = HIGHER on screen = TOP of plant
+            .slice(0, Math.min(3, Math.max(1, Math.floor(Math.random() * 3) + 1)));
+
+        console.log(`Found ${finalPositions.length} branch endpoints, selected ${flowerPositions.length} for flowers`);
+        console.log('All endpoints:', finalPositions.map(p => `(${Math.round(p.x)}, ${Math.round(p.y)})`).join(', '));
+        flowerPositions.forEach((pos, i) => {
+            console.log(`🌸 Flower ${i + 1}: (${Math.round(pos.x)}, ${Math.round(pos.y)}) depth: ${pos.depth} size: ${pos.size}`);
+        });
+
+        // Draw segments with watercolor effect
+        if (animate) {
+            let segmentIndex = 0;
+            let animationRunning = true;
+            
+            function drawNextSegment() {
+                if (segmentIndex < segments.length && animationRunning) {
+                    drawWatercolorSegment(segments[segmentIndex], plantType.colors);
+                    segmentIndex++;
+                    requestAnimationFrame(drawNextSegment);
+                } else if (animationRunning) {
+                    animationRunning = false;
+                    // After all segments are drawn, add flowers
+                    setTimeout(() => {
+                        flowerPositions.forEach((pos, index) => {
+                            setTimeout(() => {
+                                drawLargeFlower(pos.x, pos.y, plantType.colors, pos.size);
+                            }, index * 300);
+                        });
+                    }, 200);
+                }
+            }
+            drawNextSegment();
+        } else {
+            // Non-animated drawing
+            segments.forEach(segment => drawWatercolorSegment(segment, plantType.colors));
+            flowerPositions.forEach((pos) => {
+                drawLargeFlower(pos.x, pos.y, plantType.colors, pos.size);
+            });
+        }
+    }
+
+    // Draw individual segment with watercolor effects
+    function drawWatercolorSegment(segment, colors) {
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const baseLineWidth = Math.max(0.8, segment.length * 0.35); // More variation based on segment
+        
+        ctx.save();
+        
+        // Add more organic variation based on branch depth and position
+        const organicVariation = 1 + (Math.random() - 0.5) * 0.3; // ±15% size variation
+        const depthVariation = 1 + (segment.depth * 0.1); // Thicker base branches
+        const finalLineWidth = baseLineWidth * organicVariation * depthVariation;
+        
+        // Create watercolor brush effect with more variation
+        for (let pass = 0; pass < 3; pass++) {
+            const passVariation = 1 + (Math.random() - 0.5) * 0.2; // Vary each pass
+            ctx.globalAlpha = (0.4 - pass * 0.1) * passVariation;
+            ctx.strokeStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${ctx.globalAlpha})`;
+            ctx.lineWidth = finalLineWidth + pass * (0.6 + Math.random() * 0.4);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            // More variation in offset based on segment properties
+            const offsetVariation = segment.depth === 0 ? 1.5 : 2.5; // Main stem steadier
+            const offsetX = (Math.random() - 0.5) * offsetVariation;
+            const offsetY = (Math.random() - 0.5) * offsetVariation;
+            
+            ctx.beginPath();
+            ctx.moveTo(segment.startX + offsetX, segment.startY + offsetY);
+            
+            // Vary curve intensity based on branch properties
+            const curveIntensity = segment.depth === 0 ? 3 : 6; // Branches more curved
+            const midX = (segment.startX + segment.endX) / 2 + (Math.random() - 0.5) * curveIntensity;
+            const midY = (segment.startY + segment.endY) / 2 + (Math.random() - 0.5) * curveIntensity;
+            
+            // Sometimes use straight lines for more variation
+            if (Math.random() > 0.3) {
+                ctx.quadraticCurveTo(midX, midY, segment.endX + offsetX, segment.endY + offsetY);
+            } else {
+                ctx.lineTo(segment.endX + offsetX, segment.endY + offsetY);
+            }
+            
+            ctx.stroke();
+        }
+        
+        // Vary shadow effect based on segment depth
+        const shadowIntensity = 0.15 + segment.depth * 0.05;
+        ctx.shadowColor = `rgba(${color.r}, ${color.g}, ${color.b}, ${shadowIntensity})`;
+        ctx.shadowBlur = 2 + Math.random() * 3; // Random blur
+        ctx.globalAlpha = 0.08 + Math.random() * 0.08;
+        
+        // Slightly vary shadow color
+        const shadowColor = colors[Math.floor(Math.random() * colors.length)];
+        ctx.strokeStyle = `rgba(${shadowColor.r}, ${shadowColor.g}, ${shadowColor.b}, 1)`;
+        ctx.lineWidth = finalLineWidth * (1.5 + Math.random() * 0.6); // Varied shadow thickness
+        
+        ctx.beginPath();
+        ctx.moveTo(segment.startX, segment.startY);
+        ctx.lineTo(segment.endX, segment.endY);
+        ctx.stroke();
+        
+        ctx.restore();
+    }
+
+    // Draw a large decorative flower at the end of plant growth
+    function drawLargeFlower(x, y, colors, size = 'medium') {
+        // More varied size multipliers with random variation
+        let sizeMultiplier = 1.0;
+        switch(size) {
+            case 'large':
+                sizeMultiplier = 1.6 + Math.random() * 0.4; // 1.6 - 2.0
+                break;
+            case 'medium':
+                sizeMultiplier = 1.1 + Math.random() * 0.3; // 1.1 - 1.4
+                break;
+            case 'small':
+                sizeMultiplier = 0.7 + Math.random() * 0.2; // 0.7 - 0.9
+                break;
+        }
+        
+        const baseRadius = 14 * sizeMultiplier;
+        const petalCount = 5 + Math.floor(Math.random() * 5); // 5-9 petals
+        
+        // Add height variation by offsetting the flower position
+        const heightVariation = (Math.random() - 0.5) * 8; // ±4px vertical offset
+        const flowerY = y + heightVariation;
+        
+        ctx.save();
+        
+        // Draw petals with more variation
+        const angleStep = (Math.PI * 2) / petalCount;
+        const petalVariations = []; // Store variations for consistency
+        
+        for (let i = 0; i < petalCount; i++) {
+            // Generate consistent variations per petal
+            petalVariations[i] = {
+                length: 0.7 + Math.random() * 0.7, // 0.7 - 1.4
+                width: 0.25 + Math.random() * 0.35, // 0.25 - 0.6
+                angleOffset: (Math.random() - 0.5) * 0.4
+            };
+        }
+        
+        for (let i = 0; i < petalCount; i++) {
+            const angle = i * angleStep + petalVariations[i].angleOffset;
+            const petalLength = baseRadius * petalVariations[i].length;
+            const petalWidth = baseRadius * petalVariations[i].width;
+            
+            ctx.save();
+            ctx.translate(x, flowerY);
+            ctx.rotate(angle);
+            
+            // Draw petal with multiple layers for watercolor effect
+            for (let layer = 0; layer < 3; layer++) {
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                ctx.globalAlpha = 0.45 - layer * 0.1;
+                ctx.fillStyle = `rgba(${color.r}, ${color.g}, ${color.b}, ${ctx.globalAlpha})`;
+                
+                // More varied petal shapes
+                const layerOffset = layer * 2;
+                ctx.beginPath();
+                ctx.ellipse(
+                    petalLength * 0.65, 
+                    (Math.random() - 0.5) * 3, // Small vertical offset for organic look
+                    (petalLength * 0.9) + layerOffset, 
+                    petalWidth + layerOffset, 
+                    (Math.random() - 0.5) * 0.2, // Slight rotation per layer
+                    0, 
+                    Math.PI * 2
+                );
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+        
+        // Draw flower center with size variation
+        const centerSize = baseRadius * (0.25 + Math.random() * 0.15); // Variable center size
+        const centerColors = [
+            { r: 255, g: 223, b: 100 }, // Warm yellow
+            { r: 255, g: 200, b: 80 },  // Golden yellow
+            { r: 255, g: 180, b: 120 }  // Peachy yellow
+        ];
+        
+        const centerColor = centerColors[Math.floor(Math.random() * centerColors.length)];
+        
+        for (let layer = 0; layer < 3; layer++) {
+            ctx.globalAlpha = 0.8 - layer * 0.2;
+            ctx.fillStyle = `rgba(${centerColor.r}, ${centerColor.g}, ${centerColor.b}, ${ctx.globalAlpha})`;
+            ctx.beginPath();
+            ctx.arc(x, flowerY, centerSize + layer * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Add tiny highlight details for some flowers
+        if (size === 'large' && Math.random() > 0.5) {
+            ctx.globalAlpha = 0.6;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.beginPath();
+            ctx.arc(x - centerSize * 0.3, flowerY - centerSize * 0.3, centerSize * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+
+    // --- 4. SCROLL & CLICK INTERACTION LOGIC ---
+    
+    // Store the state of which plants have grown
+    const grownPlants = {};
+    let clickedPlants = [];
+
+    // Plant configurations for each section
+    const sectionPlants = {
+        'publications': { type: 'flower', x: 0.15 },
+        'experience': { type: 'tree', x: 0.85 },
+        'education': { type: 'fern', x: 0.20 },
+        'research-interest': { type: 'vine', x: 0.80 },
+        'skills': { type: 'flower', x: 0.25 }
+    };
+
+    // Intersection observer for scroll-triggered plant growth
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            const id = entry.target.id;
+            if (entry.isIntersecting && !grownPlants[id] && sectionPlants[id]) {
+                grownPlants[id] = true;
+                
+                const plantConfig = sectionPlants[id];
+                const plantType = plantTypes[plantConfig.type];
+                const rect = entry.target.getBoundingClientRect();
+                const y = rect.top + rect.height * 0.7; // Grow near bottom of section
+                const x = width * plantConfig.x;
+
+                // Generate and draw the L-System plant
+                const lSystemString = generateLSystem(plantType.axiom, plantType.rules, plantType.iterations);
+                drawLSystem(lSystemString, x, y, plantType, true);
+            }
+        });
+    }, { threshold: 0.5 });
+
+    // Observe all sections with an ID
+    document.querySelectorAll('section[id]').forEach(section => {
+        observer.observe(section);
+    });
+
+    // Click-to-plant functionality
+    gardenCanvas.addEventListener('click', (e) => {
+        const rect = gardenCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        // Get a random plant type
+        const plantTypeNames = Object.keys(plantTypes);
+        const randomPlantType = plantTypes[plantTypeNames[Math.floor(Math.random() * plantTypeNames.length)]];
+        
+        // Generate and draw the plant
+        const lSystemString = generateLSystem(randomPlantType.axiom, randomPlantType.rules, randomPlantType.iterations);
+        drawLSystem(lSystemString, x, y, randomPlantType, true);
+        
+        // Store the clicked plant for potential clearing
+        clickedPlants.push({ x, y, type: randomPlantType, time: Date.now() });
+        
+        // Limit the number of clicked plants to prevent canvas overcrowding
+        if (clickedPlants.length > 20) {
+            // Clear canvas and redraw only recent plants
+            ctx.clearRect(0, 0, width, height);
+            
+            // Keep only the 15 most recent plants
+            clickedPlants = clickedPlants.slice(-15);
+            
+            // Redraw all plants
+            clickedPlants.forEach(plant => {
+                const lSystemString = generateLSystem(plant.type.axiom, plant.type.rules, plant.type.iterations);
+                drawLSystem(lSystemString, plant.x, plant.y, plant.type, false);
+            });
+            
+            // Redraw section plants
+            Object.keys(grownPlants).forEach(sectionId => {
+                if (grownPlants[sectionId] && sectionPlants[sectionId]) {
+                    const plantConfig = sectionPlants[sectionId];
+                    const plantType = plantTypes[plantConfig.type];
+                    const section = document.getElementById(sectionId);
+                    const rect = section.getBoundingClientRect();
+                    const sectionY = rect.top + rect.height * 0.7;
+                    const sectionX = width * plantConfig.x;
+                    
+                    const lSystemString = generateLSystem(plantType.axiom, plantType.rules, plantType.iterations);
+                    drawLSystem(lSystemString, sectionX, sectionY, plantType, false);
+                }
+            });
+        }
+    });
+    
+    // Enable pointer events on the garden canvas for click interaction
+    gardenCanvas.style.pointerEvents = 'auto';
+    
+    // Mobile-specific optimizations
+    if (isMobile) {
+        // Reduce complexity for mobile devices
+        Object.keys(plantTypes).forEach(key => {
+            plantTypes[key].iterations = Math.max(2, plantTypes[key].iterations - 1);
+        });
+        
+        // Add touch event listeners for mobile
+        gardenCanvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = gardenCanvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            
+            // Plant with same logic as click
+            const plantTypeNames = Object.keys(plantTypes);
+            const randomPlantType = plantTypes[plantTypeNames[Math.floor(Math.random() * plantTypeNames.length)]];
+            const lSystemString = generateLSystem(randomPlantType.axiom, randomPlantType.rules, randomPlantType.iterations);
+            drawLSystem(lSystemString, x, y, randomPlantType, true);
+            
+            clickedPlants.push({ x, y, type: randomPlantType, time: Date.now() });
+            
+            if (clickedPlants.length > 15) {
+                ctx.clearRect(0, 0, width, height);
+                clickedPlants = clickedPlants.slice(-10);
+                
+                clickedPlants.forEach(plant => {
+                    const lSystemString = generateLSystem(plant.type.axiom, plant.type.rules, plant.type.iterations);
+                    drawLSystem(lSystemString, plant.x, plant.y, plant.type, false);
+                });
+                
+                Object.keys(grownPlants).forEach(sectionId => {
+                    if (grownPlants[sectionId] && sectionPlants[sectionId]) {
+                        const plantConfig = sectionPlants[sectionId];
+                        const plantType = plantTypes[plantConfig.type];
+                        const section = document.getElementById(sectionId);
+                        const rect = section.getBoundingClientRect();
+                        const sectionY = rect.top + rect.height * 0.7;
+                        const sectionX = width * plantConfig.x;
+                        
+                        const lSystemString = generateLSystem(plantType.axiom, plantType.rules, plantType.iterations);
+                        drawLSystem(lSystemString, sectionX, sectionY, plantType, false);
+                    }
+                });
+            }
+        }, { passive: false });
+    }
+    } // End of initializeGarden function
+});

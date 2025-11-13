@@ -1,0 +1,306 @@
+/* style.css */
+
+:root {
+    --bg-color: #fdfaf6; /* A very soft, warm off-white, like paper */
+    --text-color: #4a4a4a;
+    --header-color: #3b3b3b;
+    --primary-accent: #d87093; /* Pale Violet Red */
+    --secondary-accent: #4682b4; /* Steel Blue */
+    --leaf-color: #2E8B57; /* Sea Green */
+    --font-header: 'Playfair Display', serif;
+    --font-body: 'Roboto', sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-body);
+    font-weight: 300;
+    margin: 0;
+    padding: 0;
+    line-height: 1.7;
+    overflow-x: hidden; /* Prevent horizontal scroll */
+}
+
+/* --- Canvas Styling --- */
+#fluid-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1; /* Place it behind everything */
+    will-change: transform; /* Optimize for animations */
+}
+
+#garden-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allows clicking through the canvas */
+    z-index: 0; /* Place it behind content cards but above background */
+    will-change: transform; /* Optimize for animations */
+}
+
+/* --- Layout and Content Styling --- */
+.container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 4rem 2rem;
+    position: relative;
+    z-index: 2; /* Ensure content is above both background and garden */
+}
+
+.main-header {
+    text-align: center;
+    margin-bottom: 4rem;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    padding-bottom: 2rem;
+}
+
+.main-header h1 {
+    font-family: var(--font-header);
+    font-size: 3.5rem;
+    color: var(--header-color);
+    margin: 0;
+}
+
+.contact-info p {
+    margin: 0.2rem 0;
+    font-size: 0.9rem;
+}
+
+.contact-info a {
+    color: var(--secondary-accent);
+    text-decoration: none;
+    font-weight: 400;
+    position: relative;
+    transition: all 0.4s ease;
+    padding: 2px 4px;
+    border-radius: 4px;
+}
+
+.contact-info a::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, 
+        rgba(216, 112, 147, 0.3), 
+        rgba(255, 105, 180, 0.3), 
+        rgba(218, 112, 214, 0.3));
+    opacity: 0;
+    transform: scale(0.8);
+    border-radius: 8px;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: -1;
+}
+
+.contact-info a:hover {
+    color: var(--primary-accent);
+    transform: translateY(-1px);
+}
+
+.contact-info a:hover::before {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* --- The "Watercolor" Content Cards --- */
+.content-card {
+    background-color: rgba(255, 255, 255, 0.85); /* More opaque for better readability */
+    backdrop-filter: blur(8px) saturate(180%); /* Enhanced frosted glass effect */
+    -webkit-backdrop-filter: blur(8px) saturate(180%); /* Safari support */
+    border-radius: 16px; /* More rounded for organic feel */
+    padding: 2rem 2.5rem;
+    margin-bottom: 3rem;
+    box-shadow: 
+        0 8px 32px rgba(0, 0, 0, 0.1),
+        0 2px 8px rgba(0, 0, 0, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3); /* Multiple shadows for depth */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.content-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+}
+
+.content-card:hover {
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 
+        0 20px 40px rgba(0, 0, 0, 0.15),
+        0 8px 16px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    background-color: rgba(255, 255, 255, 0.9);
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+h2 {
+    font-family: var(--font-header);
+    color: var(--header-color);
+    font-size: 2rem;
+    margin-top: 0;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary-accent);
+    display: inline-block;
+}
+
+.entry {
+    margin-bottom: 1.5rem;
+}
+
+.entry:last-child {
+    margin-bottom: 0;
+}
+
+h3 {
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 1.2rem;
+    color: var(--secondary-accent);
+    margin: 0 0 0.2rem 0;
+}
+
+p {
+    margin: 0;
+}
+
+strong {
+    font-weight: 400;
+}
+
+/* --- Interactive Elements --- */
+.content-card h3,
+.content-card p {
+    position: relative;
+}
+
+.content-card a {
+    color: var(--secondary-accent);
+    text-decoration: none;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.content-card a::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 3px;
+    background: linear-gradient(90deg, 
+        rgba(70, 130, 180, 0.6),
+        rgba(100, 149, 237, 0.6),
+        rgba(135, 206, 235, 0.6));
+    border-radius: 2px;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.content-card a:hover {
+    color: var(--primary-accent);
+}
+
+.content-card a:hover::after {
+    width: 100%;
+}
+
+/* --- Click Instructions --- */
+.garden-instructions {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 1rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 0.85rem;
+    color: var(--text-color);
+    z-index: 1000;
+    animation: fadeInUp 1s ease-out 2s both;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- Mobile Responsiveness --- */
+@media (max-width: 768px) {
+    .container {
+        padding: 2rem 1rem;
+        max-width: 100%;
+    }
+    
+    .main-header h1 {
+        font-size: 2.5rem;
+    }
+    
+    .content-card {
+        padding: 1.5rem 1.25rem;
+        margin-bottom: 2rem;
+        border-radius: 12px;
+    }
+    
+    .content-card:hover {
+        transform: translateY(-4px) scale(1.01);
+    }
+    
+    h2 {
+        font-size: 1.75rem;
+    }
+    
+    .garden-instructions {
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+        text-align: center;
+        font-size: 0.8rem;
+    }
+    
+    /* Reduce WebGL effects on mobile for performance */
+    #fluid-canvas {
+        filter: blur(1px);
+        opacity: 0.7;
+    }
+}
+
+@media (max-width: 480px) {
+    .main-header h1 {
+        font-size: 2rem;
+    }
+    
+    .contact-info {
+        font-size: 0.8rem;
+    }
+    
+    .content-card {
+        padding: 1.25rem 1rem;
+    }
+    
+    h2 {
+        font-size: 1.5rem;
+    }
+}
